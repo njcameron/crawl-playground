@@ -1,73 +1,46 @@
-# React + TypeScript + Vite
+# Cloudflare Browser Rendering Playground
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A local dev UI for exploring Cloudflare's [Browser Rendering REST API](https://developers.cloudflare.com/browser-rendering/rest-api/). Paste your API token, pick an endpoint, build a request, and inspect the response — with a dedicated crawl-job tracker that polls, persists across reloads, and paginates results.
 
-Currently, two official plugins are available:
+Supports all the Browser Rendering endpoints: `content`, `markdown`, `screenshot`, `pdf`, `json`, `scrape`, `links`, and `crawl`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Getting started
 
-## React Compiler
+### Prerequisites
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js 20+
+- A Cloudflare account with Browser Rendering enabled
+- A Cloudflare API token with the **Browser Rendering — Edit** permission
+  ([create one here](https://dash.cloudflare.com/profile/api-tokens))
+- Your Cloudflare **Account ID** (from the dashboard sidebar)
 
-## Expanding the ESLint configuration
+### Install and run
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open the URL Vite prints (typically `http://localhost:5173`).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+1. Paste your API token and Account ID into the top bar. They're saved to `localStorage` — nothing leaves your browser.
+2. Pick an endpoint from the tab bar.
+3. Fill in the request fields (at minimum, a URL) and hit **Send**.
+4. For `crawl` jobs, the right panel tracks progress. Click a job to open the paginated record browser.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### How the proxy works
+
+Cloudflare's API doesn't set permissive CORS headers, so the dev server proxies `/cf-api/*` → `https://api.cloudflare.com/*` (see `vite.config.ts`). The app uses the proxy path directly; there's no separate backend.
+
+This means the playground only works under `npm run dev`. `npm run build` produces static assets but there is no production proxy.
+
+## Scripts
+
+- `npm run dev` — start the dev server with the Cloudflare proxy
+- `npm run build` — type-check and build (static assets only; no proxy)
+- `npm run lint` — run ESLint
+- `npm run preview` — preview the static build
+
+## Stack
+
+React 19 · TypeScript · Vite · Tailwind v4 · shadcn/ui (Base UI) · Lucide icons

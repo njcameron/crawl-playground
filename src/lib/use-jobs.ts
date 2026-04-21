@@ -1,55 +1,99 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { Credentials, CrawlJob, ApiResponse } from './types';
+import type { Credentials, CrawlJob, CrawlJobStatus } from './types';
 import { crawlGet, crawlDelete } from './api';
 
+const STORAGE_KEY = 'cf-playground-jobs';
+
+function loadJobs(): CrawlJob[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return [];
+}
+
+function saveJobs(jobs: CrawlJob[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(jobs));
+}
+
+const TERMINAL_STATUSES: CrawlJobStatus[] = [
+  'complete',
+  'completed',
+  'cancelled_due_to_timeout',
+  'cancelled_due_to_limits',
+  'cancelled_by_user',
+  'errored',
+];
+
+function isTerminal(status: CrawlJobStatus): boolean {
+  return TERMINAL_STATUSES.includes(status);
+}
+
+export { isTerminal };
+
 export function useJobs(credentials: Credentials) {
-  const [jobs, setJobs] = useState<CrawlJob[]>([]);
+  const [jobs, setJobs] = useState<CrawlJob[]>(loadJobs);
   const intervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
-  const addJob = useCallback((id: string) => {
-    setJobs((prev) => [...prev, { id, status: 'running' }]);
+  // Persist whenever jobs change
+  useEffect(() => {
+    saveJobs(jobs);
+  }, [jobs]);
+
+  // On mount, resume polling any still-running jobs
+  useEffect(() => {
+    const running = loadJobs().filter((j) => !isTerminal(j.status));
+    for (const job of running) {
+      pollJob(job.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const addJob = useCallback((id: string, url?: string) => {
+    setJobs((prev) => {
+      if (prev.some((j) => j.id === id)) return prev;
+      return [{ id, status: 'running', url, startedAt: new Date().toISOString() }, ...prev];
+    });
+  }, []);
+
+  const updateJob = useCallback((id: string, updates: Partial<CrawlJob>) => {
+    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...updates } : j)));
   }, []);
 
   const pollJob = useCallback(
-    (jobId: string, onResult?: (res: ApiResponse) => void) => {
+    (jobId: string) => {
       if (intervalsRef.current.has(jobId)) return;
 
-      const interval = setInterval(async () => {
+      const poll = async () => {
         try {
           const res = await crawlGet(credentials, jobId);
           const data = res.data as Record<string, unknown>;
 
-          setJobs((prev) =>
-            prev.map((j) => {
-              if (j.id !== jobId) return j;
-              if (data.success === true && data.result) {
-                const result = data.result as Record<string, unknown>;
-                return {
-                  ...j,
-                  status: (result.status as string) === 'complete' ? 'done' : 'running',
-                  total: result.total as number | undefined,
-                  completed: result.completed as number | undefined,
-                  result: result,
-                };
-              }
-              return j;
-            }),
-          );
-
-          const result = data.result as Record<string, unknown> | undefined;
-          if (result?.status === 'complete') {
-            clearInterval(interval);
-            intervalsRef.current.delete(jobId);
-            if (onResult) onResult(res);
+          if (data.success === true && data.result) {
+            const result = data.result as Record<string, unknown>;
+            const status = result.status as CrawlJobStatus;
+            updateJob(jobId, {
+              status,
+              total: result.total as number | undefined,
+              finished: result.finished as number | undefined,
+              browserSecondsUsed: result.browserSecondsUsed as number | undefined,
+            });
+            if (isTerminal(status)) {
+              clearInterval(interval);
+              intervalsRef.current.delete(jobId);
+            }
           }
         } catch {
           // keep polling on transient errors
         }
-      }, 5000);
+      };
 
+      // Poll immediately, then every 5s
+      poll();
+      const interval = setInterval(poll, 5000);
       intervalsRef.current.set(jobId, interval);
     },
-    [credentials],
+    [credentials, updateJob],
   );
 
   const cancelJob = useCallback(
@@ -60,19 +104,26 @@ export function useJobs(credentials: Credentials) {
         intervalsRef.current.delete(jobId);
       }
       await crawlDelete(credentials, jobId);
-      setJobs((prev) =>
-        prev.map((j) => (j.id === jobId ? { ...j, status: 'cancelled' } : j)),
-      );
+      updateJob(jobId, { status: 'cancelled_by_user' });
     },
-    [credentials],
+    [credentials, updateJob],
   );
 
-  const loadJobResult = useCallback(
-    async (jobId: string): Promise<ApiResponse> => {
-      return crawlGet(credentials, jobId);
-    },
-    [credentials],
-  );
+  const removeJob = useCallback((jobId: string) => {
+    const interval = intervalsRef.current.get(jobId);
+    if (interval) {
+      clearInterval(interval);
+      intervalsRef.current.delete(jobId);
+    }
+    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+  }, []);
+
+  const clearTerminalJobs = useCallback(() => {
+    setJobs((prev) => {
+      const running = prev.filter((j) => !isTerminal(j.status));
+      return running;
+    });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -80,5 +131,5 @@ export function useJobs(credentials: Credentials) {
     };
   }, []);
 
-  return { jobs, addJob, pollJob, cancelJob, loadJobResult };
+  return { jobs, addJob, pollJob, cancelJob, removeJob, clearTerminalJobs };
 }

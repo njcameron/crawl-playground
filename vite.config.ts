@@ -10,4 +10,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/cf-api': {
+        target: 'https://api.cloudflare.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/cf-api/, ''),
+      },
+    },
+  },
 })

@@ -121,13 +121,59 @@ export type EndpointRequest =
   | ContentRequest
   | MarkdownRequest;
 
+export type CrawlJobStatus =
+  | 'queued'
+  | 'running'
+  | 'complete'
+  | 'completed'
+  | 'cancelled_due_to_timeout'
+  | 'cancelled_due_to_limits'
+  | 'cancelled_by_user'
+  | 'errored';
+
 export interface CrawlJob {
   id: string;
-  status: 'running' | 'done' | 'cancelled' | 'error';
+  status: CrawlJobStatus;
+  url?: string;
+  startedAt?: string;
   total?: number;
-  completed?: number;
-  result?: unknown;
+  finished?: number;
+  browserSecondsUsed?: number;
   error?: string;
+}
+
+export type RecordStatus = 'queued' | 'completed' | 'disallowed' | 'skipped' | 'errored' | 'cancelled';
+
+export interface CrawlRecord {
+  url?: string;
+  status?: RecordStatus;
+  html?: string;
+  markdown?: string;
+  json?: unknown;
+  links?: string[];
+  screenshot?: string;
+  metadata?: {
+    status?: number;
+    title?: string;
+    url?: string;
+  };
+  [key: string]: unknown;
+}
+
+export interface CrawlGetParams {
+  cursor?: number;
+  limit?: number;
+  status?: RecordStatus;
+}
+
+export interface CrawlResultPage {
+  id: string;
+  status: CrawlJobStatus;
+  total: number;
+  finished: number;
+  cursor?: number;
+  browserSecondsUsed?: number;
+  records: CrawlRecord[];
 }
 
 export interface ApiResponse {

@@ -1,7 +1,7 @@
-import type { Credentials, ApiResponse, Endpoint, EndpointRequest, CrawlJob } from './types';
+import type { Credentials, ApiResponse, Endpoint, EndpointRequest, CrawlGetParams } from './types';
 import { getEndpointMeta } from './endpoints';
 
-const BASE = 'https://api.cloudflare.com/client/v4/accounts';
+const BASE = '/cf-api/client/v4/accounts';
 
 function buildUrl(creds: Credentials, path: string): string {
   return `${BASE}/${creds.accountId}/browser-rendering${path}`;
@@ -90,8 +90,15 @@ export async function cfFetch(
 export async function crawlGet(
   creds: Credentials,
   jobId: string,
+  params?: CrawlGetParams,
 ): Promise<ApiResponse> {
-  const url = `${BASE}/${creds.accountId}/browser-rendering/crawl/${jobId}`;
+  const base = `${BASE}/${creds.accountId}/browser-rendering/crawl/${jobId}`;
+  const searchParams = new URLSearchParams();
+  if (params?.cursor != null) searchParams.set('cursor', String(params.cursor));
+  if (params?.limit != null) searchParams.set('limit', String(params.limit));
+  if (params?.status) searchParams.set('status', params.status);
+  const qs = searchParams.toString();
+  const url = qs ? `${base}?${qs}` : base;
   const res = await fetch(url, { headers: buildHeaders(creds) });
   const responseHeaders: Record<string, string> = {};
   res.headers.forEach((v, k) => {
@@ -125,6 +132,3 @@ export async function crawlDelete(
   };
 }
 
-export function buildCrawlJob(id: string): CrawlJob {
-  return { id, status: 'running' };
-}
